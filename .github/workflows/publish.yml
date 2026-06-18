@@ -29,6 +29,9 @@ jobs:
       - name: Copy sources into rpmbuild SOURCES
         run: cp beeper-wrapper.sh beeper.desktop ~/rpmbuild/SOURCES/
 
+      - name: Download remote sources (AppImage)
+        run: spectool -g -R beeper.spec
+
       - name: Build RPM
         run: rpmbuild -bb beeper.spec
 
