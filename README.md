@@ -1,16 +1,16 @@
 # beeper-rpm
 
-Automatically packages the [Beeper](https://www.beeper.com) AppImage as an RPM and publishes it to Fedora COPR.
+Automatically packages the [Beeper](https://www.beeper.com) AppImage as an RPM and publishes it to a self-hosted DNF repository at `packages.mtrnord.blog`.
 
 Beeper is proprietary software. This repository does **not** redistribute the Beeper binary — the spec file downloads it from Beeper's official CDN at build time.
 
 ---
 
-## Install from COPR
+## Install
 
 ```sh
-dnf copr enable mtrnord/beeper
-dnf install beeper
+sudo curl -o /etc/yum.repos.d/mtrnord.repo https://packages.mtrnord.blog/mtrnord.repo
+sudo dnf install beeper
 ```
 
 ---
@@ -62,7 +62,7 @@ The resulting RPM lands in `~/rpmbuild/RPMS/x86_64/`.
 
 ### Build in a clean chroot with mock (recommended)
 
-`mock` replicates what COPR does and catches missing `BuildRequires`:
+`mock` replicates what CI does and catches missing `BuildRequires`:
 
 ```sh
 sudo dnf install mock
@@ -82,7 +82,7 @@ The RPM ends up in `/var/lib/mock/fedora-44-x86_64/result/`.
 ```sh
 sudo rpm -ivh ~/rpmbuild/RPMS/x86_64/beeper-*.rpm
 # or with mock output:
-sudo rpm -ivh /var/lib/mock/fedora-42-x86_64/result/beeper-*.rpm
+sudo rpm -ivh /var/lib/mock/fedora-44-x86_64/result/beeper-*.rpm
 
 beeper
 ```
@@ -91,11 +91,17 @@ beeper
 
 ## How auto-updates work
 
-A GitHub Actions workflow (`.github/workflows/check-update.yml`) runs daily:
+Two GitHub Actions workflows handle updates end-to-end:
 
-1. Follows the Beeper download redirect to detect the current version.
-2. If the version differs from what's in `beeper.spec`, it updates the `%global appimage_version` line and commits.
-3. COPR detects the new commit and triggers a rebuild automatically.
+1. **`check-update.yml`** runs daily at 06:00 UTC:
+   - Follows the Beeper download redirect to detect the current version.
+   - If the version differs from `beeper.spec`, it updates `%global appimage_version` and commits.
+
+2. **`publish.yml`** triggers on every push to `main` (i.e. after each version bump commit):
+   - Builds the RPM inside a Fedora container.
+   - GPG-signs the package.
+   - Uploads the RPM and updated `repo.gpg` to `packages.mtrnord.blog`.
+   - Runs `createrepo_c --update` to refresh the repo metadata.
 
 ---
 
