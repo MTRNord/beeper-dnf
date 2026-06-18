@@ -79,6 +79,7 @@ jobs:
           REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
         run: |
           ssh -i ~/.ssh/deploy_key \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
             "repo-deploy@${MAINSERVER_HOST}" \
             "mkdir -p /var/lib/dnf-repo/${REPO_PATH}"
 
@@ -88,9 +89,11 @@ jobs:
           REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
         run: |
           scp -i ~/.ssh/deploy_key -O \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
             ~/rpmbuild/RPMS/x86_64/beeper-*.rpm \
             "repo-deploy@${MAINSERVER_HOST}:/var/lib/dnf-repo/${REPO_PATH}/"
           scp -i ~/.ssh/deploy_key -O \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
             repo.gpg \
             "repo-deploy@${MAINSERVER_HOST}:/var/lib/dnf-repo/"
 
@@ -100,5 +103,6 @@ jobs:
           REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
         run: |
           ssh -i ~/.ssh/deploy_key \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
             "repo-deploy@${MAINSERVER_HOST}" \
             "createrepo_c --update /var/lib/dnf-repo/${REPO_PATH}"
