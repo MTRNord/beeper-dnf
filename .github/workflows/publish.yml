@@ -35,6 +35,16 @@ jobs:
       - name: Build RPM
         run: rpmbuild -bb beeper.spec
 
+      - name: Detect Fedora release and arch from built RPM
+        id: rpm_info
+        run: |
+          rpm_file=$(ls ~/rpmbuild/RPMS/x86_64/beeper-*.rpm | head -1)
+          fedora_ver=$(rpm -qp --queryformat '%{RELEASE}' "$rpm_file" | grep -oP '(?<=\.fc)\d+')
+          arch=$(rpm -qp --queryformat '%{ARCH}' "$rpm_file")
+          echo "fedora_ver=${fedora_ver}" >> "$GITHUB_OUTPUT"
+          echo "arch=${arch}"            >> "$GITHUB_OUTPUT"
+          echo "repo_path=linux/fedora/${fedora_ver}/${arch}/stable" >> "$GITHUB_OUTPUT"
+
       - name: Import GPG signing key
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -56,25 +66,39 @@ jobs:
       - name: Install SSH deploy key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+          MAINSERVER_SSH_HOST_KEY: ${{ secrets.MAINSERVER_SSH_HOST_KEY }}
         run: |
           install -dm 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$MAINSERVER_HOST" >> ~/.ssh/known_hosts
+          printf '%s\n' "$MAINSERVER_SSH_HOST_KEY" >> ~/.ssh/known_hosts
+
+      - name: Create versioned repo directory on mainserver
+        env:
+          MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+          REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "repo-deploy@${MAINSERVER_HOST}" \
+            "mkdir -p /var/lib/dnf-repo/${REPO_PATH}"
 
       - name: Upload RPM and GPG key to mainserver
         env:
           MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+          REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
         run: |
           scp -i ~/.ssh/deploy_key -O \
-            ~/rpmbuild/RPMS/x86_64/beeper-*.rpm repo.gpg \
+            ~/rpmbuild/RPMS/x86_64/beeper-*.rpm \
+            "repo-deploy@${MAINSERVER_HOST}:/var/lib/dnf-repo/${REPO_PATH}/"
+          scp -i ~/.ssh/deploy_key -O \
+            repo.gpg \
             "repo-deploy@${MAINSERVER_HOST}:/var/lib/dnf-repo/"
 
       - name: Refresh repo metadata on mainserver
         env:
           MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+          REPO_PATH: ${{ steps.rpm_info.outputs.repo_path }}
         run: |
           ssh -i ~/.ssh/deploy_key \
             "repo-deploy@${MAINSERVER_HOST}" \
-            "createrepo_c --update /var/lib/dnf-repo"
+            "createrepo_c --update /var/lib/dnf-repo/${REPO_PATH}"
