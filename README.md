@@ -13,6 +13,12 @@ sudo curl -o /etc/yum.repos.d/mtrnord.repo https://packages.mtrnord.blog/mtrnord
 sudo dnf install beeper
 ```
 
+When prompted to import the GPG key, verify the fingerprint matches before accepting:
+
+```
+Fingerprint: FB7F 7B3E 1074 AA60 3F19  9BCE 175E 4D3C 6385 91B3
+```
+
 ---
 
 ## Local build
