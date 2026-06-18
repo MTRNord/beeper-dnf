@@ -1,0 +1,78 @@
+name: Build and publish beeper RPM
+
+on:
+  push:
+    branches: [main]
+    paths: [beeper.spec]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898  # fedora:latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: dnf install -y rpm-build rpmdevtools squashfs-tools gnupg2 openssh-clients rpm-sign
+
+      - name: Set up RPM build tree
+        run: rpmdev-setuptree
+
+      - name: Copy sources into rpmbuild SOURCES
+        run: cp beeper-wrapper.sh beeper.desktop ~/rpmbuild/SOURCES/
+
+      - name: Build RPM
+        run: rpmbuild -bb beeper.spec
+
+      - name: Import GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Configure RPM macro for signing
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: printf '%%_gpg_name %s\n' "$GPG_KEY_ID" > ~/.rpmmacros
+
+      - name: Sign RPM
+        run: rpmsign --addsign ~/rpmbuild/RPMS/x86_64/beeper-*.rpm
+
+      - name: Export GPG public key
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: gpg --armor --export "$GPG_KEY_ID" > repo.gpg
+
+      - name: Install SSH deploy key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+        run: |
+          install -dm 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$MAINSERVER_HOST" | \
+            ssh-keyscan -f - 2>/dev/null >> ~/.ssh/known_hosts
+
+      - name: Upload RPM and GPG key to mainserver
+        env:
+          MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+        run: |
+          scp -i ~/.ssh/deploy_key -O \
+            ~/rpmbuild/RPMS/x86_64/beeper-*.rpm repo.gpg \
+            "repo-deploy@${MAINSERVER_HOST}:/var/lib/dnf-repo/"
+
+      - name: Refresh repo metadata on mainserver
+        env:
+          MAINSERVER_HOST: ${{ secrets.MAINSERVER_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "repo-deploy@${MAINSERVER_HOST}" \
+            "createrepo_c --update /var/lib/dnf-repo"

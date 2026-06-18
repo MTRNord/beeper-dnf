@@ -1,0 +1,55 @@
+name: Check for Beeper update
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect upstream version
+        id: ver
+        run: |
+          REDIRECT=$(curl -sI \
+            'https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop' \
+            | grep -i '^location:' | tr -d '\r' | awk '{print $2}')
+          VERSION=$(basename "$REDIRECT" | grep -oP '\d+\.\d+\.\d+')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Upstream version: $VERSION"
+
+      - name: Check current spec version
+        id: current
+        run: |
+          CURRENT=$(grep -oP '(?<=%global appimage_version )\S+' beeper.spec)
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Spec version: $CURRENT"
+
+      - name: Update spec and desktop file
+        if: steps.ver.outputs.version != steps.current.outputs.version
+        env:
+          NEW_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          sed -i "s/^%global appimage_version.*/%global appimage_version ${NEW_VERSION}/" beeper.spec
+
+          # Prepend a new changelog entry
+          DATE=$(LC_TIME=C date '+%a %b %d %Y')
+          ENTRY="* ${DATE} Auto Update <support@midnightthoughts.space> - ${NEW_VERSION}-1\n- Update to ${NEW_VERSION}\n"
+          sed -i "/^%changelog/a ${ENTRY}" beeper.spec
+
+      - name: Commit and push
+        if: steps.ver.outputs.version != steps.current.outputs.version
+        env:
+          NEW_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git config user.name "beeper-bot"
+          git config user.email "support@midnightthoughts.space"
+          git add beeper.spec
+          git commit -m "chore: bump to ${NEW_VERSION}"
+          git push
