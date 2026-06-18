@@ -61,8 +61,7 @@ jobs:
           install -dm 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$MAINSERVER_HOST" | \
-            ssh-keyscan -f - 2>/dev/null >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$MAINSERVER_HOST" >> ~/.ssh/known_hosts
 
       - name: Upload RPM and GPG key to mainserver
         env:
