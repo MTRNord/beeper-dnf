@@ -1,4 +1,4 @@
-%global appimage_version 4.2.936
+%global appimage_version 4.2.945
 
 Name:           beeper
 Version:        %{appimage_version}
@@ -74,6 +74,9 @@ done
 %{_datadir}/icons/
 
 %changelog
+* Sat Jun 20 2026 Auto Update <support@midnightthoughts.space> - 4.2.945-1
+- Update to 4.2.945
+
 * Wed Jun 18 2025 Auto Update <support@midnightthoughts.space> - 4.2.936-1
 - Update to 4.2.936
 
