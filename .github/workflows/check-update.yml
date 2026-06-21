@@ -10,9 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
 
       - name: Detect upstream version
         id: ver
@@ -47,9 +50,17 @@ jobs:
         if: steps.ver.outputs.version != steps.current.outputs.version
         env:
           NEW_VERSION: ${{ steps.ver.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "beeper-bot"
           git config user.email "support@midnightthoughts.space"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git add beeper.spec
           git commit -m "chore: bump to ${NEW_VERSION}"
-          git push
+          git push origin main
+
+      - name: Trigger publish workflow
+        if: steps.ver.outputs.version != steps.current.outputs.version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref main
